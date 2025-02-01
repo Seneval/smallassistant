@@ -24,24 +24,21 @@ exports.handler = async function(event, context) {
       };
     }
 
-    // Define the prompt using the user message and the assistant id.
-    const prompt = message;
-
-    // Call OpenAI's completions endpoint
-    const response = await fetch("https://api.openai.com/v1/completions", {
+    // Use OpenAI Chat Completions API with the assistant id in the system prompt.
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + apiKey
       },
       body: JSON.stringify({
-        model: "text-davinci-003",
-        prompt: prompt,
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: "You are asst_fV1fdSuQipHMoPYAHCpHlw8p, a helpful assistant." },
+          { role: "user", content: message }
+        ],
         max_tokens: 150,
-        temperature: 0.7,
-        top_p: 1,
-        frequency_penalty: 0,
-        presence_penalty: 0
+        temperature: 0.7
       })
     });
 
@@ -53,7 +50,9 @@ exports.handler = async function(event, context) {
       };
     }
 
-    const reply = data.choices && data.choices.length > 0 ? data.choices[0].text.trim() : "No reply";
+    const reply = data.choices && data.choices[0].message && data.choices[0].message.content
+      ? data.choices[0].message.content.trim()
+      : "No reply";
 
     return {
       statusCode: 200,
