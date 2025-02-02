@@ -8,7 +8,6 @@ exports.handler = async function(event, context) {
 
   try {
     const { message } = JSON.parse(event.body);
-
     if (!message) {
       return {
         statusCode: 400,
@@ -24,19 +23,15 @@ exports.handler = async function(event, context) {
       };
     }
 
-    // Use OpenAI Chat Completions API with the assistant id in the system prompt.
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // Use the OpenAI Assistant API with the specified assistant id.
+    const response = await fetch("https://api.openai.com/v1/assistants/asst_fV1fdSuQipHMoPYAHCpHlw8p/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + apiKey
       },
       body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: "You are asst_fV1fdSuQipHMoPYAHCpHlw8p, a helpful assistant." },
-          { role: "user", content: message }
-        ],
+        message: message,
         max_tokens: 150,
         temperature: 0.7
       })
@@ -50,10 +45,7 @@ exports.handler = async function(event, context) {
       };
     }
 
-    const reply = data.choices && data.choices[0].message && data.choices[0].message.content
-      ? data.choices[0].message.content.trim()
-      : "No reply";
-
+    const reply = data.reply ? data.reply.trim() : "No reply";
     return {
       statusCode: 200,
       body: JSON.stringify({ reply: reply })
