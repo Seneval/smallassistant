@@ -1,0 +1,12 @@
+{
+  "name": "smallassistant",
+  "version": "1.0.0",
+  "description": "Netlify build with node-fetch dependency",
+  "main": "index.js",
+  "dependencies": {
+    "node-fetch": "^2.6.7"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
