@@ -1,3 +1,5 @@
+const fetch = require('node-fetch');
+
 exports.handler = async function(event, context) {
   if (event.httpMethod !== "POST") {
     return {
@@ -23,6 +25,7 @@ exports.handler = async function(event, context) {
       };
     }
 
+    console.log("Sending request to OpenAI for message:", message);
     // Use the OpenAI Assistant API with the specified assistant id.
     const response = await fetch("https://api.openai.com/v1/assistants/asst_fV1fdSuQipHMoPYAHCpHlw8p/chat", {
       method: "POST",
@@ -36,7 +39,21 @@ exports.handler = async function(event, context) {
         temperature: 0.7
       })
     });
-
+    
+    if (!response.ok) {
+      let errorMsg = "";
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error ? errorData.error.message : JSON.stringify(errorData);
+      } catch (e) {
+        errorMsg = await response.text();
+      }
+      return {
+        statusCode: response.status,
+        body: JSON.stringify({ error: "OpenAI API error: " + errorMsg })
+      };
+    }
+    
     const data = await response.json();
     if (data.error) {
       return {
