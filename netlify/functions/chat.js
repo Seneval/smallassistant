@@ -25,44 +25,124 @@ exports.handler = async function(event, context) {
       };
     }
 
-    console.log("Sending request to OpenAI for message:", message);
-    // Use the OpenAI Assistant API with the specified assistant id.
-    const response = await fetch("https://api.openai.com/v1/assistants/asst_fV1fdSuQipHMoPYAHCpHlw8p/chat", {
+    // Set common headers for beta endpoints
+    const headers = {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + apiKey,
+      "OpenAI-Beta": "assistants=v1"
+    };
+
+    // 1. Create a new thread
+    const threadRes = await fetch("https://api.openai.com/v1/threads", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + apiKey
-      },
-      body: JSON.stringify({
-        message: message,
-        max_tokens: 150,
-        temperature: 0.7
-      })
+      headers
     });
-    
-    if (!response.ok) {
-      let errorMsg = "";
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.error ? errorData.error.message : JSON.stringify(errorData);
-      } catch (e) {
-        errorMsg = await response.text();
-      }
+    if (!threadRes.ok) {
+      const errorMsg = await threadRes.text();
       return {
-        statusCode: response.status,
-        body: JSON.stringify({ error: "OpenAI API error: " + errorMsg })
+        statusCode: threadRes.status,
+        body: JSON.stringify({ error: "Thread creation error: " + errorMsg })
       };
     }
-    
-    const data = await response.json();
-    if (data.error) {
+    const threadData = await threadRes.json();
+    const threadId = threadData.id;
+
+    // 2. Add the user's message to the thread
+    const messageRes = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        role: "user",
+        content: message
+      })
+    });
+    if (!messageRes.ok) {
+      const errorMsg = await messageRes.text();
       return {
-        statusCode: 500,
-        body: JSON.stringify({ error: data.error.message })
+        statusCode: messageRes.status,
+        body: JSON.stringify({ error: "Message creation error: " + errorMsg })
       };
     }
 
-    const reply = data.reply ? data.reply.trim() : "No reply";
+    // 3. Create a run for the assistant using your assistant ID
+    const assistantId = "asst_fV1fdSuQipHMoPYAHCpHlw8p";
+    const runRes = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        assistant_id: assistantId
+      })
+    });
+    if (!runRes.ok) {
+      const errorMsg = await runRes.text();
+      return {
+        statusCode: runRes.status,
+        body: JSON.stringify({ error: "Run creation error: " + errorMsg })
+      };
+    }
+    const runData = await runRes.json();
+    const runId = runData.id;
+
+    // 4. Poll the run status until it's completed
+    let runStatus = "";
+    while (true) {
+      const statusRes = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
+        method: "GET",
+        headers
+      });
+      if (!statusRes.ok) {
+        const errorMsg = await statusRes.text();
+        return {
+          statusCode: statusRes.status,
+          body: JSON.stringify({ error: "Run status error: " + errorMsg })
+        };
+      }
+      const statusData = await statusRes.json();
+      runStatus = statusData.status;
+      if (runStatus === "completed") {
+        break;
+      }
+      if (runStatus === "failed") {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Assistant run failed" })
+        };
+      }
+      // Wait for 1 second before checking again
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // 5. Retrieve the messages from the thread
+    const messagesRes = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
+      method: "GET",
+      headers
+    });
+    if (!messagesRes.ok) {
+      const errorMsg = await messagesRes.text();
+      return {
+        statusCode: messagesRes.status,
+        body: JSON.stringify({ error: "Retrieving messages error: " + errorMsg })
+      };
+    }
+    const messagesData = await messagesRes.json();
+    const messagesList = messagesData.data;
+    if (!messagesList || messagesList.length === 0) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "No messages returned" })
+      };
+    }
+
+    // 6. Extract the assistant's response from the latest message
+    const lastMessage = messagesList[0];
+    let reply = "No valid text response";
+    if (lastMessage.content && Array.isArray(lastMessage.content) && lastMessage.content.length > 0) {
+      const textContent = lastMessage.content.find(item => item.type === "text");
+      if (textContent && textContent.text && textContent.text.value) {
+        reply = textContent.text.value;
+      }
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({ reply: reply })
